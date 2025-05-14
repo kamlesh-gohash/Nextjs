@@ -1,0 +1,53 @@
+name: Deploy Next.js App via ECR
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Build App
+        run: npm run build
+
+      - name: Docker Login to AWS ECR
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY}}
+        run: |
+          aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
+          aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
+          aws configure set default.region ap-south-1
+          aws ecr get-login-password | docker login --username AWS --password-stdin 941824419453.dkr.ecr.ap-south-1.amazonaws.com
+
+      - name: Build Docker Image
+        run: docker build -t nextjs-app .
+
+      - name: Tag Docker Image
+        run: docker tag nextjs-app:latest 941824419453.dkr.ecr.ap-south-1.amazonaws.com/myapp:latest
+
+      - name: Push Docker Image to ECR
+        run: docker push 941824419453.dkr.ecr.ap-south-1.amazonaws.com/myapp:latest
+
+      - name: Stop Existing Container (if any)
+        run: |
+          docker stop nextjs-app || true
+          docker rm nextjs-app || true
+
+      - name: Run Latest Container
+        run: |
+          docker pull 941824419453.dkr.ecr.ap-south-1.amazonaws.com/myapp:latest
+          docker run -d --name nextjs-app -p 80:3000 941824419453.dkr.ecr.ap-south-1.amazonaws.com/myapp:latest
